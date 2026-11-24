@@ -54,6 +54,7 @@ test('index.html inline script parses cleanly with zero syntax errors', () => {
 test('PWA manifest.json is valid and installable', () => {
   const manifest = JSON.parse(manifestRaw);
   assert.equal(manifest.display, 'standalone');
+  assert.equal(manifest.orientation, 'any');
   assert.equal(manifest.start_url, './');
   assert.equal(manifest.scope, './');
   assert.ok(manifest.name && manifest.short_name);
@@ -95,4 +96,6 @@ test('Pronunciation engine and HanziWriter alias map are properly wired', () => 
   for (const ch of ['敎', '飮', '窓', '淸', '擧', '氷', '査']) {
     assert.ok(html.includes(`'${ch}':`), `Missing HanziWriter alias for ${ch}`);
   }
+  assert.ok(html.includes('-webkit-touch-callout: none'), 'Long-press callout must be disabled');
+  assert.ok(html.includes("document.addEventListener('contextmenu'"), 'Context menu prevention must be wired');
 });
