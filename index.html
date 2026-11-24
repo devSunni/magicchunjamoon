@@ -1465,19 +1465,36 @@
         totalCorrect: 0,
         maxCombo: 0,
         muted: false,
-        parentUnlockAll: false
+        parentUnlockAll: false,
+        ui: {
+          activeTab: 'battle',
+          battleLevel: '8급',
+          battleMode: 'hanja2hun',
+          battleStage: 1,
+          writeLevel: '8급',
+          writeIndex: 0,
+          writeShowGuide: true,
+          writeBrushColor: '#1c1917',
+          dexLevel: '전체',
+          dexStatus: 'all',
+          bannerClosed: false
+        }
       };
     }
 
     const DEFAULT_STATE = makeDefaultState('junu');
 
     function loadState(pid = activeProfileId) {
+      const base = makeDefaultState(pid);
       try {
         const raw = localStorage.getItem(getStorageKey(pid));
-        if (!raw) return makeDefaultState(pid);
-        return Object.assign(makeDefaultState(pid), JSON.parse(raw));
+        if (!raw) return base;
+        const parsed = JSON.parse(raw);
+        return Object.assign(base, parsed, {
+          ui: Object.assign({}, base.ui, parsed && parsed.ui ? parsed.ui : {})
+        });
       } catch (e) {
-        return makeDefaultState(pid);
+        return base;
       }
     }
 
@@ -1490,16 +1507,105 @@
 
     let state = loadState(activeProfileId);
 
+    function persistUIState() {
+      const bannerEl = document.getElementById('gradeInfoBanner');
+      state.ui = {
+        activeTab,
+        battleLevel: battle.level,
+        battleMode: battle.mode,
+        battleStage: battle.stage,
+        writeLevel: writeState.level,
+        writeIndex: writeState.index,
+        writeShowGuide: writeState.showGuide,
+        writeBrushColor: writeState.brushColor,
+        dexLevel: dexState.level,
+        dexStatus: dexState.status,
+        bannerClosed: bannerEl ? bannerEl.classList.contains('hidden') : Boolean(state.ui && state.ui.bannerClosed)
+      };
+      saveState();
+    }
+
+    function syncAllFilterButtonsUI() {
+      document.querySelectorAll('.battle-lvl-btn').forEach(b => {
+        const isAct = b.dataset.level === battle.level;
+        if (b.dataset.level === '오답') {
+          b.className = isAct
+            ? 'battle-lvl-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-500 text-white transition'
+            : 'battle-lvl-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-950/80 text-rose-200 border border-rose-500/40 hover:bg-rose-900 transition';
+        } else {
+          b.className = isAct
+            ? 'battle-lvl-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500 text-slate-950 transition'
+            : 'battle-lvl-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
+        }
+      });
+      const modeSel = document.getElementById('battleModeSelect');
+      if (modeSel) modeSel.value = battle.mode;
+
+      document.querySelectorAll('.write-lvl-btn').forEach(b => {
+        b.className = b.dataset.wlevel === writeState.level
+          ? 'write-lvl-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500 text-slate-950'
+          : 'write-lvl-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-300';
+      });
+      document.querySelectorAll('.brush-btn').forEach(b => {
+        b.classList.toggle('ring-2', b.dataset.brush === writeState.brushColor);
+        b.classList.toggle('ring-amber-400', b.dataset.brush === writeState.brushColor);
+      });
+
+      document.querySelectorAll('.dex-lvl-btn').forEach(b => {
+        b.className = b.dataset.dlevel === dexState.level
+          ? 'dex-lvl-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500 text-slate-950'
+          : 'dex-lvl-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-300';
+      });
+      const dexStatusSel = document.getElementById('dexStatusFilter');
+      if (dexStatusSel) dexStatusSel.value = dexState.status;
+
+      const bannerEl = document.getElementById('gradeInfoBanner');
+      if (bannerEl) bannerEl.classList.toggle('hidden', Boolean(state.ui && state.ui.bannerClosed));
+    }
+
+    function restoreUIStateFromProfile() {
+      const ui = (state && state.ui) ? state.ui : makeDefaultState(activeProfileId).ui;
+      const validLevels = new Set(LEVELS_META.map(m => m.key));
+
+      // Battle
+      let bLvl = ui.battleLevel || '8급';
+      if (bLvl === '오답' && state.wrongIds.length === 0) bLvl = '8급';
+      else if (bLvl !== '전체' && bLvl !== '오답' && (!validLevels.has(bLvl) || !isLevelUnlocked(bLvl))) bLvl = '8급';
+      battle.level = bLvl;
+      battle.mode = ['hanja2hun', 'hun2hanja', 'mixed'].includes(ui.battleMode) ? ui.battleMode : 'hanja2hun';
+      battle.stage = Math.max(1, parseInt(ui.battleStage, 10) || 1);
+
+      // Write
+      let wLvl = (validLevels.has(ui.writeLevel) && isLevelUnlocked(ui.writeLevel)) ? ui.writeLevel : '8급';
+      writeState.level = wLvl;
+      const wList = HANJA_DATA.filter(h => h.level === wLvl);
+      const rawIdx = parseInt(ui.writeIndex, 10) || 0;
+      writeState.index = Math.max(0, Math.min(rawIdx, Math.max(0, wList.length - 1)));
+      writeState.showGuide = ui.writeShowGuide !== false;
+      writeState.brushColor = ui.writeBrushColor || '#1c1917';
+      writeState.strokes = [];
+
+      // Dex
+      let dLvl = ui.dexLevel || '전체';
+      if (dLvl !== '전체' && (!validLevels.has(dLvl) || !isLevelUnlocked(dLvl))) dLvl = '전체';
+      dexState.level = dLvl;
+      dexState.status = ['all', 'mastered', 'unmastered', 'wrong'].includes(ui.dexStatus) ? ui.dexStatus : 'all';
+
+      syncAllFilterButtonsUI();
+      updateHeaderAndStats();
+      renderPartnerGrid();
+      resetBattle(false);
+
+      const targetTab = ['battle', 'write', 'dex', 'exam'].includes(ui.activeTab) ? ui.activeTab : 'battle';
+      switchTab(targetTab, { skipSave: true });
+    }
+
     function switchProfile(pid) {
       if (!PROFILES[pid]) return;
       activeProfileId = pid;
       state = loadState(pid);
       saveState();
-      updateHeaderAndStats();
-      renderPartnerGrid();
-      renderDex();
-      if (activeTab === 'write') renderWriteView();
-      resetBattle(false);
+      restoreUIStateFromProfile();
       showToast(`${PROFILES[pid].emoji} ${PROFILES[pid].name} 모드로 전환했어요!`);
     }
 
@@ -1780,8 +1886,9 @@
       }
     }
 
-    function switchTab(tab) {
+    function switchTab(tab, opts = {}) {
       activeTab = tab;
+      if (!opts.skipSave) persistUIState();
       document.querySelectorAll('.tab-section').forEach(s => s.classList.add('hidden'));
       document.getElementById(`tab-${tab}`).classList.remove('hidden');
 
@@ -2500,6 +2607,7 @@
     document.getElementById('headerPartnerBtn').addEventListener('click', () => switchTab('exam'));
     document.getElementById('closeBannerBtn').addEventListener('click', () => {
       document.getElementById('gradeInfoBanner').classList.add('hidden');
+      persistUIState();
     });
 
     document.getElementById('soundToggleBtn').addEventListener('click', () => {
@@ -2536,12 +2644,14 @@
           }
         });
         refreshAllLevelLocksUI();
+        persistUIState();
         resetBattle(false);
       });
     });
 
     document.getElementById('battleModeSelect').addEventListener('change', (e) => {
       battle.mode = e.target.value;
+      persistUIState();
       pickNextBattleQuestion();
     });
 
@@ -2565,6 +2675,7 @@
 
     document.getElementById('battleRestartBtn').addEventListener('click', () => {
       resetBattle(battle.bossHp <= 0);
+      persistUIState();
     });
 
     // Keyboard shortcuts 1-4 for battle
@@ -2596,6 +2707,7 @@
         });
         refreshAllLevelLocksUI();
         renderWriteView();
+        persistUIState();
       });
     });
 
@@ -2603,18 +2715,21 @@
       writeState.index -= 1;
       writeState.strokes = [];
       renderWriteView();
+      persistUIState();
     });
 
     document.getElementById('writeNextBtn').addEventListener('click', () => {
       writeState.index += 1;
       writeState.strokes = [];
       renderWriteView();
+      persistUIState();
     });
 
     document.getElementById('writeHanjaSelect').addEventListener('change', (e) => {
       writeState.index = parseInt(e.target.value, 10) || 0;
       writeState.strokes = [];
       renderWriteView();
+      persistUIState();
     });
 
     document.getElementById('writeSpeakBtn').addEventListener('click', () => {
@@ -2625,6 +2740,7 @@
     document.getElementById('writeToggleGuideBtn').addEventListener('click', () => {
       writeState.showGuide = !writeState.showGuide;
       document.getElementById('writeToggleGuideBtn').textContent = writeState.showGuide ? '👁 가이드 ON' : '🙈 가이드 OFF';
+      persistUIState();
       if (!writeState.useFallback && writeState.writer) {
         if (writeState.showGuide) writeState.writer.showOutline();
         else writeState.writer.hideOutline();
@@ -2638,6 +2754,7 @@
         writeState.brushColor = btn.dataset.brush;
         document.querySelectorAll('.brush-btn').forEach(b => b.classList.remove('ring-2', 'ring-amber-400'));
         btn.classList.add('ring-2', 'ring-amber-400');
+        persistUIState();
         if (!writeState.useFallback) {
           const item = getWriteList()[writeState.index];
           if (item) startStrokeOrderQuiz(item);
@@ -2718,12 +2835,14 @@
         });
         refreshAllLevelLocksUI();
         renderDex();
+        persistUIState();
       });
     });
 
     document.getElementById('dexStatusFilter').addEventListener('change', (e) => {
       dexState.status = e.target.value;
       renderDex();
+      persistUIState();
     });
 
     document.getElementById('dexSearchInput').addEventListener('input', (e) => {
@@ -2850,10 +2969,7 @@
       state = makeDefaultState(activeProfileId);
       saveState();
       document.getElementById('resetModal').classList.add('hidden');
-      updateHeaderAndStats();
-      renderPartnerGrid();
-      renderDex();
-      resetBattle(false);
+      restoreUIStateFromProfile();
       showToast('학습 기록이 초기화되었습니다.');
     });
 
@@ -2936,9 +3052,7 @@
       });
     }
     window.addEventListener('load', () => {
-      updateHeaderAndStats();
-      renderPartnerGrid();
-      resetBattle(false);
+      restoreUIStateFromProfile();
     });
   </script>
 </body>

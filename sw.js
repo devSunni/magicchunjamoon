@@ -1,4 +1,4 @@
-const CACHE_NAME = 'magic-hanja-pwa-v4';
+const CACHE_NAME = 'magic-hanja-pwa-v5';
 const CORE_ASSETS = [
   './',
   './index.html',

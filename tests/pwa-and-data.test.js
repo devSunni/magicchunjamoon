@@ -98,4 +98,6 @@ test('Pronunciation engine and HanziWriter alias map are properly wired', () => 
   }
   assert.ok(html.includes('-webkit-touch-callout: none'), 'Long-press callout must be disabled');
   assert.ok(html.includes("document.addEventListener('contextmenu'"), 'Context menu prevention must be wired');
+  assert.ok(html.includes('function persistUIState()'), 'UI state persistence must be wired');
+  assert.ok(html.includes('function restoreUIStateFromProfile()'), 'UI state restoration must be wired');
 });
